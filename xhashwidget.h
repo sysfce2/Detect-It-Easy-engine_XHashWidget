@@ -44,8 +44,8 @@ public:
 
     void setData(QIODevice *pDevice, XBinary::FT fileType, qint64 nOffset, qint64 nSize, bool bAuto = false);
     void reload();
-    virtual void adjustView();
-    virtual void reloadData(bool bSaveSelection);
+    void adjustView() override;
+    void reloadData(bool bSaveSelection) override;
 
 private slots:
     void on_toolButtonReload_clicked();
@@ -56,7 +56,17 @@ private slots:
     void on_comboBoxMapMode_currentIndexChanged(int nIndex);
 
 protected:
-    virtual void registerShortcuts(bool bState);
+    void registerShortcuts(bool bState) override;
+
+private:
+    void clearResults();
+    void populateHashMethods();
+    void fillRegionsModel();
+    void applyTableHeaders(QStandardItemModel *pModel);
+    void applyColumnWidths();
+
+    static const qint32 COLUMN_NAME_WIDTH = 150;
+    static const qint32 COLUMN_FIXED_WIDTH = 80;
 
 private:
     Ui::XHashWidget *ui;

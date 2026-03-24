@@ -22,7 +22,13 @@
 
 #include "ui_xhashwidget.h"
 
-XHashWidget::XHashWidget(QWidget *pParent) : XShortcutsWidget(pParent), ui(new Ui::XHashWidget)
+XHashWidget::XHashWidget(QWidget *pParent)
+    : XShortcutsWidget(pParent)
+    , ui(new Ui::XHashWidget)
+    , m_pDevice(nullptr)
+    , m_nOffset(0)
+    , m_nSize(0)
+    , m_hashData()
 {
     ui->setupUi(this);
 
@@ -39,30 +45,9 @@ XHashWidget::XHashWidget(QWidget *pParent) : XShortcutsWidget(pParent), ui(new U
     ui->toolButtonReload->setToolTip(tr("Reload"));
     ui->toolButtonSave->setToolTip(tr("Save"));
 
-    m_pDevice = nullptr;
-    m_nOffset = 0;
-    m_nSize = 0;
-    m_hashData = {};
-
     ui->lineEditHash->setValidatorMode(XLineEditValidator::MODE_TEXT);
 
-    const bool bBlocked1 = ui->comboBoxMethod->blockSignals(true);
-
-    QList<XBinary::HASH> listHashMethods = XBinary::getHashMethodsAsList();
-
-    qint32 nNumberOfMethods = listHashMethods.count();
-
-    for (qint32 i = 0; i < nNumberOfMethods; i++) {
-        XBinary::HASH hash = listHashMethods.at(i);
-        ui->comboBoxMethod->addItem(XBinary::hashIdToString(hash), hash);
-    }
-
-    if (nNumberOfMethods > 1)  // TODO Check
-    {
-        ui->comboBoxMethod->setCurrentIndex(1);  // MD5 default TODO consts !!!
-    }
-
-    ui->comboBoxMethod->blockSignals(bBlocked1);
+    populateHashMethods();
 }
 
 XHashWidget::~XHashWidget()
@@ -70,25 +55,120 @@ XHashWidget::~XHashWidget()
     delete ui;
 }
 
-void XHashWidget::setData(QIODevice *pDevice, XBinary::FT fileType, qint64 nOffset, qint64 nSize, bool bAuto)
+void XHashWidget::clearResults()
 {
-    this->m_pDevice = pDevice;
-    this->m_nOffset = nOffset;
-    this->m_nSize = nSize;
+    ui->lineEditHash->clear();
+    ui->tableViewRegions->setCustomModel(new QStandardItemModel(0, 0), true);
+}
 
-    if (this->m_nSize == -1) {
-        this->m_nSize = (pDevice->size()) - (this->m_nOffset);
+void XHashWidget::populateHashMethods()
+{
+    const bool bBlocked = ui->comboBoxMethod->blockSignals(true);
+    ui->comboBoxMethod->clear();
+
+    QList<XBinary::HASH> listHashMethods = XBinary::getHashMethodsAsList();
+    qint32 nNumberOfMethods = listHashMethods.count();
+
+    for (qint32 i = 0; i < nNumberOfMethods; i++) {
+        XBinary::HASH hash = listHashMethods.at(i);
+        ui->comboBoxMethod->addItem(XBinary::hashIdToString(hash), hash);
     }
 
-    ui->lineEditOffset->setValue32_64(this->m_nOffset);
-    ui->lineEditSize->setValue32_64(this->m_nSize);
+    if (nNumberOfMethods > 1) {
+        ui->comboBoxMethod->setCurrentIndex(1);
+    } else if (nNumberOfMethods == 1) {
+        ui->comboBoxMethod->setCurrentIndex(0);
+    }
 
-    SubDevice subDevice(pDevice, this->m_nOffset, this->m_nSize);
+    ui->comboBoxMethod->blockSignals(bBlocked);
+}
+
+void XHashWidget::applyTableHeaders(QStandardItemModel *pModel)
+{
+    pModel->setHeaderData(0, Qt::Horizontal, tr("Name"));
+    pModel->setHeaderData(1, Qt::Horizontal, tr("Offset"));
+    pModel->setHeaderData(2, Qt::Horizontal, tr("Size"));
+    pModel->setHeaderData(3, Qt::Horizontal, tr("Hash"));
+}
+
+void XHashWidget::applyColumnWidths()
+{
+    qint32 nColumnSize = XLineEditHEX::getWidthFromMode(this, m_hashData.mode);
+
+    ui->tableViewRegions->setColumnWidth(0, COLUMN_NAME_WIDTH);
+    ui->tableViewRegions->setColumnWidth(1, nColumnSize);
+    ui->tableViewRegions->setColumnWidth(2, nColumnSize);
+    ui->tableViewRegions->setColumnWidth(3, COLUMN_FIXED_WIDTH);
+}
+
+void XHashWidget::fillRegionsModel()
+{
+    qint32 nNumberOfMemoryRecords = m_hashData.listMemoryRecords.count();
+    QStandardItemModel *pModel = new QStandardItemModel(nNumberOfMemoryRecords, 4, ui->tableViewRegions);
+
+    applyTableHeaders(pModel);
+
+    for (qint32 i = 0; i < nNumberOfMemoryRecords; i++) {
+        const HashProcess::MEMORY_RECORD &record = m_hashData.listMemoryRecords.at(i);
+
+        QStandardItem *pItemName = new QStandardItem(record.sName);
+        pModel->setItem(i, 0, pItemName);
+
+        if (record.nOffset != -1) {
+            QStandardItem *pItemOffset = new QStandardItem(XLineEditHEX::getFormatString(m_hashData.mode, record.nOffset));
+            pModel->setItem(i, 1, pItemOffset);
+        }
+
+        if (record.nSize != -1) {
+            QStandardItem *pItemSize = new QStandardItem(XLineEditHEX::getFormatString(m_hashData.mode, record.nSize));
+            pModel->setItem(i, 2, pItemSize);
+        }
+
+        QStandardItem *pItemHash = new QStandardItem(record.sHash);
+        pModel->setItem(i, 3, pItemHash);
+    }
+
+    XOptions::setModelTextAlignment(pModel, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    XOptions::setModelTextAlignment(pModel, 1, Qt::AlignRight | Qt::AlignVCenter);
+    XOptions::setModelTextAlignment(pModel, 2, Qt::AlignRight | Qt::AlignVCenter);
+    XOptions::setModelTextAlignment(pModel, 3, Qt::AlignLeft | Qt::AlignVCenter);
+
+    ui->tableViewRegions->setCustomModel(pModel, true);
+    ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+    ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+
+    applyColumnWidths();
+}
+
+void XHashWidget::setData(QIODevice *pDevice, XBinary::FT fileType, qint64 nOffset, qint64 nSize, bool bAuto)
+{
+    m_pDevice = pDevice;
+    m_nOffset = nOffset;
+    m_nSize = nSize;
+
+    if ((m_pDevice == nullptr) || (m_nOffset < 0)) {
+        clearResults();
+        return;
+    }
+
+    if (m_nSize == -1) {
+        m_nSize = qMax<qint64>(0, m_pDevice->size() - m_nOffset);
+    }
+
+    if ((m_nSize < 0) || (m_nOffset + m_nSize > m_pDevice->size())) {
+        m_nSize = qMax<qint64>(0, m_pDevice->size() - m_nOffset);
+    }
+
+    ui->lineEditOffset->setValue32_64(m_nOffset);
+    ui->lineEditSize->setValue32_64(m_nSize);
+
+    SubDevice subDevice(m_pDevice, m_nOffset, m_nSize);
 
     if (subDevice.open(QIODevice::ReadOnly)) {
         XFormats::setFileTypeComboBox(fileType, &subDevice, ui->comboBoxType);
         XFormats::getMapModesList(fileType, ui->comboBoxMapMode);
-
         subDevice.close();
     }
 
@@ -99,10 +179,14 @@ void XHashWidget::setData(QIODevice *pDevice, XBinary::FT fileType, qint64 nOffs
 
 void XHashWidget::reload()
 {
-    // TODO QTableView
-    m_hashData.hash = (XBinary::HASH)ui->comboBoxMethod->currentData().toInt();
-    m_hashData.fileType = (XBinary::FT)(ui->comboBoxType->currentData().toInt());
-    m_hashData.mapMode = (XBinary::MAPMODE)(ui->comboBoxMapMode->currentData().toInt());
+    if ((m_pDevice == nullptr) || (m_nSize <= 0) || (m_nOffset < 0)) {
+        clearResults();
+        return;
+    }
+
+    m_hashData.hash = static_cast<XBinary::HASH>(ui->comboBoxMethod->currentData().toInt());
+    m_hashData.fileType = static_cast<XBinary::FT>(ui->comboBoxType->currentData().toInt());
+    m_hashData.mapMode = static_cast<XBinary::MAPMODE>(ui->comboBoxMapMode->currentData().toInt());
     m_hashData.nOffset = m_nOffset;
     m_hashData.nSize = m_nSize;
 
@@ -113,68 +197,16 @@ void XHashWidget::reload()
     dhp.start();
     dhp.showDialogDelay();
 
-    if (dhp.isSuccess()) {
-        ui->lineEditHash->setValue_String(m_hashData.sHash);
-
-        qint32 nNumberOfMemoryRecords = m_hashData.listMemoryRecords.count();
-
-        QStandardItemModel *pModel = new QStandardItemModel(nNumberOfMemoryRecords, 4);
-
-        pModel->setHeaderData(0, Qt::Horizontal, tr("Name"));
-        pModel->setHeaderData(1, Qt::Horizontal, tr("Offset"));
-        pModel->setHeaderData(2, Qt::Horizontal, tr("Size"));
-        pModel->setHeaderData(3, Qt::Horizontal, tr("Hash"));
-
-        for (qint32 i = 0; i < nNumberOfMemoryRecords; i++) {
-            QStandardItem *pItemName = new QStandardItem;
-
-            pItemName->setText(m_hashData.listMemoryRecords.at(i).sName);
-
-            pModel->setItem(i, 0, pItemName);
-
-            if (m_hashData.listMemoryRecords.at(i).nOffset != -1) {
-                QStandardItem *pItemOffset = new QStandardItem;
-
-                pItemOffset->setText(XLineEditHEX::getFormatString(m_hashData.mode, m_hashData.listMemoryRecords.at(i).nOffset));
-                // pItemOffset->setData(m_hashData.listMemoryRecords.at(i).nOffset, Qt::DisplayRole);
-                pModel->setItem(i, 1, pItemOffset);
-            }
-
-            if (m_hashData.listMemoryRecords.at(i).nSize != -1) {
-                QStandardItem *pItemSize = new QStandardItem;
-
-                pItemSize->setText(XLineEditHEX::getFormatString(m_hashData.mode, m_hashData.listMemoryRecords.at(i).nSize));
-                // pItemSize->setData(m_hashData.listMemoryRecords.at(i).nSize, Qt::DisplayRole);
-                pModel->setItem(i, 2, pItemSize);
-            }
-
-            QStandardItem *pItemHash = new QStandardItem;
-
-            QString sHash = m_hashData.listMemoryRecords.at(i).sHash;
-
-            pItemHash->setText(sHash);
-            pModel->setItem(i, 3, pItemHash);
-        }
-
-        XOptions::setModelTextAlignment(pModel, 0, Qt::AlignLeft | Qt::AlignVCenter);
-        XOptions::setModelTextAlignment(pModel, 1, Qt::AlignRight | Qt::AlignVCenter);
-        XOptions::setModelTextAlignment(pModel, 2, Qt::AlignRight | Qt::AlignVCenter);
-        XOptions::setModelTextAlignment(pModel, 3, Qt::AlignLeft | Qt::AlignVCenter);
-
-        ui->tableViewRegions->setCustomModel(pModel, true);
-
-        ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
-        ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
-        ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
-        ui->tableViewRegions->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-
-        qint32 nColumnSize = XLineEditHEX::getWidthFromMode(this, m_hashData.mode);
-
-        ui->tableViewRegions->setColumnWidth(0, 150);  // TODO consts
-        ui->tableViewRegions->setColumnWidth(1, nColumnSize);
-        ui->tableViewRegions->setColumnWidth(2, nColumnSize);
+    if (!dhp.isSuccess()) {
+        clearResults();
+        return;
     }
+
+    ui->lineEditHash->setValue_String(m_hashData.sHash);
+
+    fillRegionsModel();
 }
+
 
 void XHashWidget::adjustView()
 {
