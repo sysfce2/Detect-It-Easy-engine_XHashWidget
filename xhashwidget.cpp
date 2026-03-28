@@ -22,13 +22,7 @@
 
 #include "ui_xhashwidget.h"
 
-XHashWidget::XHashWidget(QWidget *pParent)
-    : XShortcutsWidget(pParent)
-    , ui(new Ui::XHashWidget)
-    , m_pDevice(nullptr)
-    , m_nOffset(0)
-    , m_nSize(0)
-    , m_hashData()
+XHashWidget::XHashWidget(QWidget *pParent) : XShortcutsWidget(pParent), ui(new Ui::XHashWidget), m_pDevice(nullptr), m_nOffset(0), m_nSize(0), m_hashData()
 {
     ui->setupUi(this);
 
@@ -206,7 +200,6 @@ void XHashWidget::reload()
 
     fillRegionsModel();
 }
-
 
 void XHashWidget::adjustView()
 {
