@@ -122,7 +122,7 @@ void HashProcess::process()
             for (qint32 i = 0; (i < nNumberOfImports) && XBinary::isPdStructNotCanceled(m_pPdStruct); i++) {
                 MEMORY_RECORD memoryRecord = {};
 
-                memoryRecord.sName = QString("%1(%2)(CRC)['%3']").arg(tr("Import"), QString::number(i), listImports.at(i).sName);
+                memoryRecord.sName = QString("%1(%2)(CRC)['%3']").arg(tr("Import")).arg(QString::number(i)).arg(listImports.at(i).sName);
                 memoryRecord.nOffset = -1;
                 memoryRecord.nSize = -1;
                 memoryRecord.sHash = XBinary::valueToHex(listHashes.at(i));
