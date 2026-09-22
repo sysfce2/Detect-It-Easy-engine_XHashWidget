@@ -78,7 +78,7 @@ void XHashWidget::clearResults()
 
 void XHashWidget::invalidateData(const QString &sStatus)
 {
-    m_pDevice.clear();
+    m_pDevice = nullptr;
     m_nOffset = 0;
     m_nSize = 0;
     m_hashData = {};
@@ -100,7 +100,7 @@ void XHashWidget::invalidateData(const QString &sStatus)
 
 bool XHashWidget::isDataReady() const
 {
-    QIODevice *pDevice = m_pDevice.data();
+    QIODevice *pDevice = m_pDevice;
 
     if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable() || pDevice->isSequential() || (m_nOffset < 0) || (m_nSize <= 0)) {
         return false;
@@ -304,11 +304,11 @@ void XHashWidget::reload()
     m_hashData.nOffset = 0;
     m_hashData.nSize = m_nSize;
 
-    QPointer<QIODevice> pDevice = m_pDevice;
+    QIODevice *pDevice = m_pDevice;
     const qint64 nOriginalPosition = pDevice->pos();
     bool bSuccess = false;
 
-    SubDevice subDevice(pDevice.data(), m_nOffset, m_nSize);
+    SubDevice subDevice(pDevice, m_nOffset, m_nSize);
 
     if (!subDevice.open(QIODevice::ReadOnly)) {
         if (pDevice && (nOriginalPosition >= 0)) {
@@ -397,7 +397,7 @@ void XHashWidget::on_toolButtonSave_clicked()
     QAbstractItemModel *pModel = ui->tableViewRegions->getProxyModel();
 
     if (isDataReady() && pModel && (pModel->rowCount() > 0)) {
-        XShortcutsWidget::saveTableModel(pModel, XBinary::getResultFileName(m_pDevice.data(), QString("%1.txt").arg(tr("Hash"))));
+        XShortcutsWidget::saveTableModel(pModel, XBinary::getResultFileName(m_pDevice, QString("%1.txt").arg(tr("Hash"))));
     }
 }
 

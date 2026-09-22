@@ -24,7 +24,6 @@
 #include <QFileDialog>
 #include <QImageWriter>
 #include <QItemSelection>
-#include <QPointer>
 #include <QStandardItemModel>
 
 #include "hashprocess.h"
@@ -75,7 +74,7 @@ private:
 
 private:
     Ui::XHashWidget *ui;
-    QPointer<QIODevice> m_pDevice;
+    QIODevice *m_pDevice;
     qint64 m_nOffset;
     qint64 m_nSize;
     HashProcess::DATA m_hashData;
